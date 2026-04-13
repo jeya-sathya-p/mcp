@@ -6,109 +6,75 @@ import time
 # -------------------------------
 # 🌐 PAGE CONFIG
 # -------------------------------
-st.set_page_config(
-    page_title="SignSpeak AI 👋",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="SignSpeak AI 👋", layout="wide", page_icon="🤟")
 
-# Custom CSS for better UI
 st.markdown("""
 <style>
-    .main { background-color: #0f1117; }
-    .stButton>button {
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 0.5rem 2rem;
-        font-weight: 600;
-        width: 100%;
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+    html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
+    .stApp { background: #0a0a0f; color: #e8e8f0; }
+    .block-container { padding: 2rem 3rem; }
+    h1 { color: #a78bfa !important; font-size: 2.4rem !important; }
+    .stButton > button {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white; border: none; border-radius: 12px;
+        padding: 0.6rem 1.6rem; font-weight: 600;
+        transition: all 0.3s ease;
     }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 15px rgba(99,102,241,0.4);
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124,58,237,0.4); }
+    .stCodeBlock, code { background: #1a1a2e !important; border-radius: 10px; }
+    .step-box {
+        background: #12121f;
+        border: 1px solid #2a2a4a;
+        border-radius: 14px;
+        padding: 1.2rem 1.6rem;
+        margin: 0.6rem 0;
     }
-    .result-box {
-        background: #1e1e2e;
-        border: 1px solid #6366f1;
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
-        margin: 0.5rem 0;
-    }
-    .step-badge {
-        background: #6366f1;
-        color: white;
-        border-radius: 20px;
-        padding: 2px 12px;
-        font-size: 12px;
-        font-weight: 700;
-    }
+    .status-success { color: #34d399; font-weight: 600; }
+    .status-info { color: #60a5fa; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🤟 SignSpeak AI")
-st.caption("Speech → ISL Gloss → AI Visual | Powered by Groq + Replicate")
+st.caption("🎧 Voice → 🧠 ISL Gloss → 🎬 AI Sign Language Video")
 
 # -------------------------------
-# 🔑 SESSION STATE INIT
+# 🔑 SESSION STATE
 # -------------------------------
-for key in ["transcription", "isl_data", "image_url", "error_log"]:
+for key in ["transcription", "isl_data", "video_url", "video_status", "prediction_id"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 # -------------------------------
-# 🔑 SIDEBAR: API KEYS
+# 🔑 API KEYS
 # -------------------------------
+groq_key = st.secrets.get("GROQ_API_KEY", "")
+replicate_token = st.secrets.get("REPLICATE_API_TOKEN", "")
+
 with st.sidebar:
     st.header("🔑 Configuration")
-    st.markdown("---")
-
-    # Try secrets first, then manual input
-    groq_key = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
-    replicate_token = st.secrets.get("REPLICATE_API_TOKEN", "") if hasattr(st, "secrets") else ""
-
     if not groq_key:
-        groq_key = st.text_input("Groq API Key", type="password", placeholder="gsk_...")
-        st.caption("Get free key → [console.groq.com](https://console.groq.com)")
-
+        groq_key = st.text_input("Groq API Key", type="password", help="Get free key at console.groq.com")
     if not replicate_token:
-        replicate_token = st.text_input("Replicate Token", type="password", placeholder="r8_...")
-        st.caption("Get free token → [replicate.com](https://replicate.com)")
+        replicate_token = st.text_input("Replicate Token", type="password", help="Get free token at replicate.com")
 
     st.markdown("---")
+    st.markdown("**Model Used:**")
+    st.markdown("- 🎙️ Whisper Large v3 (Groq)")
+    st.markdown("- 🧠 LLaMA 3.3 70B (Groq)")
+    st.markdown("- 🎬 minimax/video-01 (Replicate)")
 
-    # Model selector
-    st.subheader("⚙️ Settings")
-    image_model = st.selectbox(
-        "Image Model",
-        [
-            "stability-ai/sdxl:7762fd07cf82c948538e41f4d1b5524441416468895acac7769c4a38e3407c91",
-            "black-forest-labs/flux-schnell",
-            "bytedance/sdxl-lightning-4step:5f24084160c9089501c1b3545d9be3c27883ae2239b6f412990e82d4a6210f8f",
-        ],
-        help="SDXL = best quality | FLUX Schnell = fastest | SDXL Lightning = fast + good"
-    )
-
+    st.markdown("---")
     if st.button("🔄 Reset All"):
-        for key in ["transcription", "isl_data", "image_url", "error_log"]:
+        for key in ["transcription", "isl_data", "video_url", "video_status", "prediction_id"]:
             st.session_state[key] = None
         st.rerun()
 
-    st.markdown("---")
-    st.subheader("📊 Status")
-    st.write("🎤 Transcription:", "✅" if st.session_state.transcription else "⏳")
-    st.write("🧠 ISL Translation:", "✅" if st.session_state.isl_data else "⏳")
-    st.write("🖼️ Image:", "✅" if st.session_state.image_url else "⏳")
 
 # -------------------------------
-# 🎤 TRANSCRIBE (Groq Whisper)
+# 🎤 TRANSCRIBE AUDIO
 # -------------------------------
 def transcribe_audio(audio_bytes):
-    if not groq_key:
-        st.error("❌ Please enter your Groq API Key in the sidebar.")
-        return None
     try:
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
         headers = {"Authorization": f"Bearer {groq_key}"}
@@ -119,282 +85,269 @@ def transcribe_audio(audio_bytes):
             "response_format": (None, "json")
         }
         res = requests.post(url, headers=headers, files=files, timeout=30)
-        if res.status_code != 200:
-            st.error(f"Groq Transcription Error {res.status_code}: {res.text}")
-            return None
-        result = res.json()
-        return result.get("text", "").strip()
-    except requests.exceptions.Timeout:
-        st.error("⏱️ Transcription timed out. Try a shorter audio clip.")
+        res.raise_for_status()
+        return res.json().get("text", "")
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Groq Transcription HTTP Error {e.response.status_code}: {e.response.text}")
         return None
     except Exception as e:
-        st.error(f"🚨 Transcription Error: {e}")
+        st.error(f"Transcription Error: {e}")
         return None
 
+
 # -------------------------------
-# 🧠 ISL TRANSLATION (Groq LLaMA)
+# 🧠 ISL TRANSLATION
 # -------------------------------
 def get_isl_translation(text):
-    if not groq_key:
-        st.error("❌ Please enter your Groq API Key in the sidebar.")
-        return None
     try:
-        system_prompt = """You are an expert Indian Sign Language (ISL) interpreter.
-Convert the given English text to ISL gloss notation.
-
-ISL Gloss Rules:
-- Use UPPERCASE words
-- Remove articles (a, an, the)
-- Use base verb forms (no -ing, -ed)
-- Keep important adjectives and nouns
-- Use ISL spatial markers like IX (index pointing)
-- Show topic-comment structure (topic first)
-
-Return ONLY valid JSON in this exact format:
-{
-  "gloss": "ISL GLOSS WORDS HERE",
-  "visual_description": "A person signing: detailed description of hand shapes, positions and movements for this ISL phrase",
-  "english_simplified": "simplified English version",
-  "signs_count": 5
-}"""
-
+        system_prompt = (
+            "You are an expert Indian Sign Language (ISL) linguist. "
+            "Convert the given English sentence into ISL. "
+            "ISL follows Subject-Object-Verb order and drops articles/prepositions. "
+            "Return ONLY a valid JSON object with these exact keys:\n"
+            "{\n"
+            '  "gloss": "ISL gloss words in correct order",\n'
+            '  "video_prompt": "A short cinematic description of a person signing each word: [gloss]. '
+            'Show clear hand shapes, front-facing view, neutral background, professional lighting, '
+            'realistic human, 5-8 seconds"\n'
+            "}"
+        )
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {groq_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
         data = {
             "model": "llama-3.3-70b-versatile",
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Convert to ISL gloss: {text}"}
+                {"role": "user", "content": text}
             ],
             "response_format": {"type": "json_object"},
-            "temperature": 0.3,
-            "max_tokens": 500
+            "temperature": 0.3
         }
         res = requests.post(url, headers=headers, json=data, timeout=30)
-        if res.status_code != 200:
-            st.error(f"Groq ISL Error {res.status_code}: {res.text}")
-            return None
-        content = res.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        st.error(f"JSON Parse Error: {e}")
+        res.raise_for_status()
+        return json.loads(res.json()["choices"][0]["message"]["content"])
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Groq ISL HTTP Error {e.response.status_code}: {e.response.text}")
         return None
     except Exception as e:
-        st.error(f"🚨 ISL Translation Error: {e}")
+        st.error(f"ISL Translation Error: {e}")
         return None
 
-# -------------------------------
-# 🖼️ GENERATE IMAGE (Replicate)
-# -------------------------------
-def generate_image_replicate(visual_description, model_version):
-    if not replicate_token:
-        st.error("❌ Please enter your Replicate API Token in the sidebar.")
-        return None
 
+# -------------------------------
+# 🎬 START VIDEO GENERATION (Async)
+# -------------------------------
+def start_video_generation(prompt):
+    """
+    Uses Replicate's minimax/video-01 model (free tier available).
+    Returns prediction_id for polling.
+    """
     try:
-        # Build a detailed, accurate prompt for ISL signing
-        prompt = (
-            f"Photorealistic image of a person performing Indian Sign Language. "
-            f"{visual_description}. "
-            f"Clear view of hands and fingers, neutral background, good lighting, "
-            f"educational illustration style, front-facing person, high detail hands"
-        )
+        url = "https://api.replicate.com/v1/models/minimax/video-01/predictions"
+        headers = {
+            "Authorization": f"Token {replicate_token}",
+            "Content-Type": "application/json",
+            "Prefer": "respond-async"
+        }
+        data = {
+            "input": {
+                "prompt": prompt,
+                "prompt_optimizer": True
+            }
+        }
+        res = requests.post(url, headers=headers, json=data, timeout=30)
+        res.raise_for_status()
+        prediction = res.json()
+        return prediction.get("id"), prediction.get("status")
+    except requests.exceptions.HTTPError as e:
+        # Fallback to wan-i2v or stable-video-diffusion
+        st.warning(f"minimax/video-01 unavailable ({e.response.status_code}), trying fallback model...")
+        return start_video_fallback(prompt)
+    except Exception as e:
+        st.error(f"Video Generation Error: {e}")
+        return None, None
 
-        negative_prompt = (
-            "blurry, distorted hands, extra fingers, missing fingers, bad anatomy, "
-            "low quality, cartoon, anime, abstract, dark lighting, back view"
-        )
 
+def start_video_fallback(prompt):
+    """
+    Fallback: Uses lucataco/animate-diff (free, widely available on Replicate)
+    """
+    try:
+        url = "https://api.replicate.com/v1/predictions"
         headers = {
             "Authorization": f"Token {replicate_token}",
             "Content-Type": "application/json"
         }
-
-        # Different input format per model
-        if "flux-schnell" in model_version:
-            input_data = {
+        data = {
+            "version": "beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",  # lucataco/animate-diff
+            "input": {
                 "prompt": prompt,
-                "num_outputs": 1,
-                "aspect_ratio": "1:1",
-                "output_format": "webp",
-                "output_quality": 90
+                "negative_prompt": "blurry, low quality, distorted hands, extra fingers",
+                "num_frames": 16,
+                "num_inference_steps": 25,
+                "guidance_scale": 7.5
             }
-        else:
-            # SDXL and SDXL Lightning
-            input_data = {
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "width": 768,
-                "height": 768,
-                "num_outputs": 1,
-                "guidance_scale": 7.5,
-                "num_inference_steps": 30 if "sdxl:7762" in model_version else 4,
-                "refine": "expert_ensemble_refiner" if "sdxl:7762" in model_version else "no_refiner",
-                "high_noise_frac": 0.8 if "sdxl:7762" in model_version else 0.8,
-            }
-
-        # Start prediction
-        payload = {"version": model_version.split(":")[-1], "input": input_data} if ":" in model_version else {"input": input_data}
-
-        # Use model-specific endpoint
-        if "/" in model_version:
-            model_path = model_version.split(":")[0]  # e.g. stability-ai/sdxl
-            if ":" in model_version:
-                version_id = model_version.split(":")[1]
-                create_url = "https://api.replicate.com/v1/predictions"
-                body = {"version": version_id, "input": input_data}
-            else:
-                create_url = f"https://api.replicate.com/v1/models/{model_path}/predictions"
-                body = {"input": input_data}
-        else:
-            create_url = "https://api.replicate.com/v1/predictions"
-            body = {"version": model_version, "input": input_data}
-
-        res = requests.post(create_url, headers=headers, json=body, timeout=30)
-
-        if res.status_code not in [200, 201]:
-            st.error(f"Replicate API Error {res.status_code}: {res.text}")
-            return None
-
+        }
+        res = requests.post(url, headers=headers, json=data, timeout=30)
+        res.raise_for_status()
         prediction = res.json()
-        prediction_id = prediction.get("id")
-
-        if not prediction_id:
-            st.error(f"No prediction ID returned: {prediction}")
-            return None
-
-        # Poll for result
-        poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
-        progress_bar = st.progress(0, text="🎨 Generating image...")
-        max_wait = 120  # seconds
-        start_time = time.time()
-        step = 0
-
-        while time.time() - start_time < max_wait:
-            poll_res = requests.get(poll_url, headers=headers, timeout=15)
-            poll_data = poll_res.json()
-            status = poll_data.get("status")
-
-            # Update progress visually
-            elapsed = time.time() - start_time
-            progress = min(int((elapsed / 60) * 100), 95)
-            progress_bar.progress(progress, text=f"🎨 Status: {status} ({int(elapsed)}s)")
-
-            if status == "succeeded":
-                progress_bar.progress(100, text="✅ Done!")
-                output = poll_data.get("output")
-                if isinstance(output, list) and len(output) > 0:
-                    return output[0]
-                elif isinstance(output, str):
-                    return output
-                else:
-                    st.error(f"Unexpected output format: {output}")
-                    return None
-
-            elif status == "failed":
-                error = poll_data.get("error", "Unknown error")
-                progress_bar.empty()
-                st.error(f"❌ Generation failed: {error}")
-                return None
-
-            elif status in ["starting", "processing"]:
-                time.sleep(3)
-                step += 1
-            else:
-                time.sleep(2)
-
-        progress_bar.empty()
-        st.error("⏱️ Image generation timed out after 2 minutes.")
-        return None
-
-    except requests.exceptions.Timeout:
-        st.error("⏱️ Request timed out connecting to Replicate.")
-        return None
+        return prediction.get("id"), prediction.get("status")
     except Exception as e:
-        st.error(f"🚨 Image Generation Error: {e}")
-        return None
+        st.error(f"Fallback Video Error: {e}")
+        return None, None
 
-# ================================
-# 🎯 MAIN APP LAYOUT
-# ================================
+
+# -------------------------------
+# 🔄 POLL VIDEO STATUS
+# -------------------------------
+def poll_video_status(prediction_id):
+    """Poll Replicate prediction status"""
+    try:
+        # Try versioned predictions first
+        url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
+        headers = {"Authorization": f"Token {replicate_token}"}
+        res = requests.get(url, headers=headers, timeout=15)
+        res.raise_for_status()
+        prediction = res.json()
+        status = prediction.get("status")
+        output = prediction.get("output")
+        error = prediction.get("error")
+        
+        video_url = None
+        if output:
+            if isinstance(output, list):
+                video_url = output[0]
+            elif isinstance(output, str):
+                video_url = output
+                
+        return status, video_url, error
+    except Exception as e:
+        return "error", None, str(e)
+
+
+# -------------------------------
+# 🎤 AUDIO INPUT SECTION
+# -------------------------------
 st.markdown("---")
+col_main, col_info = st.columns([2, 1])
 
-# STEP 1: Audio Input
-st.markdown('<span class="step-badge">STEP 1</span> **Record your voice**', unsafe_allow_html=True)
-audio = st.audio_input("🎙️ Click the mic to start recording")
+with col_main:
+    st.subheader("Step 1 — 🎙️ Record Your Voice")
+    audio = st.audio_input("Click the mic icon and speak clearly in English")
 
+with col_info:
+    st.markdown("""
+    <div class="step-box">
+    <b>📌 How it works:</b><br><br>
+    1️⃣ Record your voice<br>
+    2️⃣ AI transcribes speech<br>
+    3️⃣ Translated to ISL gloss<br>
+    4️⃣ Video generated showing signing
+    </div>
+    """, unsafe_allow_html=True)
+
+# Transcription trigger
 if audio and not st.session_state.transcription:
-    col_spin1, col_spin2 = st.columns([1, 4])
-    with col_spin1:
-        st.info("🔄 Processing...")
-
-    with st.spinner("🎧 Transcribing audio with Groq Whisper..."):
-        text = transcribe_audio(audio.getvalue())
-
-    if text:
-        st.session_state.transcription = text
-        with st.spinner("🧠 Translating to ISL gloss..."):
-            st.session_state.isl_data = get_isl_translation(text)
-        st.session_state.image_url = None  # reset image on new audio
-        st.rerun()
+    if not groq_key:
+        st.error("⚠️ Please enter your Groq API key in the sidebar.")
     else:
-        st.warning("⚠️ Could not transcribe. Check your Groq API key and audio quality.")
+        with st.spinner("🎧 Transcribing your audio with Whisper..."):
+            text = transcribe_audio(audio.getvalue())
+        if text:
+            st.session_state.transcription = text
+            with st.spinner("🧠 Translating to Indian Sign Language..."):
+                st.session_state.isl_data = get_isl_translation(text)
+            st.rerun()
 
-# STEP 2 & 3: Results
+# -------------------------------
+# 📊 OUTPUT SECTION
+# -------------------------------
 if st.session_state.transcription:
     st.markdown("---")
+    st.subheader("Step 2 — 📝 Results")
 
-    # Transcription result
-    st.markdown('<span class="step-badge">STEP 2</span> **Transcription Result**', unsafe_allow_html=True)
-    st.markdown(f'<div class="result-box">🗣️ <b>Spoken Text:</b><br>{st.session_state.transcription}</div>', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
 
-    if st.session_state.isl_data:
-        col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**🗣️ Transcribed Speech:**")
+        st.success(st.session_state.transcription)
 
-        with col1:
-            st.markdown('<span class="step-badge">ISL GLOSS</span>', unsafe_allow_html=True)
-            st.markdown(f'<div class="result-box"><h3 style="color:#6366f1">{st.session_state.isl_data.get("gloss","")}</h3></div>', unsafe_allow_html=True)
+        if st.session_state.isl_data:
+            st.markdown("**📘 ISL Gloss (sign order):**")
+            st.code(st.session_state.isl_data.get("gloss", "N/A"), language="text")
+            
+            st.markdown("**🎬 Video Prompt:**")
+            with st.expander("View prompt sent to AI"):
+                st.write(st.session_state.isl_data.get("video_prompt", ""))
 
-            with st.expander("📋 Full ISL Details"):
-                st.json(st.session_state.isl_data)
+    with col2:
+        st.markdown("**🎬 ISL Sign Language Video:**")
 
-        with col2:
-            st.markdown('<span class="step-badge">VISUAL DESCRIPTION</span>', unsafe_allow_html=True)
-            visual_desc = st.session_state.isl_data.get("visual_description", "")
-            st.markdown(f'<div class="result-box">{visual_desc}</div>', unsafe_allow_html=True)
+        # Generate button
+        if not st.session_state.prediction_id and not st.session_state.video_url:
+            if st.button("🎬 Generate ISL Video", use_container_width=True):
+                if not replicate_token:
+                    st.error("⚠️ Please enter your Replicate token in the sidebar.")
+                elif st.session_state.isl_data:
+                    prompt = st.session_state.isl_data.get("video_prompt", "")
+                    with st.spinner("🚀 Submitting video generation job..."):
+                        pred_id, status = start_video_generation(prompt)
+                    if pred_id:
+                        st.session_state.prediction_id = pred_id
+                        st.session_state.video_status = status
+                        st.rerun()
 
-    st.markdown("---")
-    st.markdown('<span class="step-badge">STEP 3</span> **Generate ISL Visual**', unsafe_allow_html=True)
+        # Poll and display status
+        if st.session_state.prediction_id and not st.session_state.video_url:
+            status, video_url, error = poll_video_status(st.session_state.prediction_id)
+            st.session_state.video_status = status
 
-    col_btn, col_info = st.columns([1, 3])
-    with col_btn:
-        gen_clicked = st.button("🎨 Generate Image", use_container_width=True)
-    with col_info:
-        st.caption(f"Model: `{image_model.split('/')[1].split(':')[0] if '/' in image_model else image_model}`")
-        st.caption("⚡ FLUX Schnell ~10s | SDXL Lightning ~15s | SDXL ~45s")
+            if status in ("starting", "processing"):
+                st.info(f"⏳ Video is being generated... Status: **{status}**")
+                st.markdown("_This typically takes 30–90 seconds. Refresh to check progress._")
+                if st.button("🔃 Check Status"):
+                    st.rerun()
+                    
+                # Auto-refresh via progress display
+                progress_bar = st.progress(0)
+                for i in range(30):
+                    time.sleep(1)
+                    progress_bar.progress((i + 1) / 30)
+                    s, v, e = poll_video_status(st.session_state.prediction_id)
+                    if s == "succeeded" and v:
+                        st.session_state.video_url = v
+                        st.session_state.video_status = "succeeded"
+                        progress_bar.progress(1.0)
+                        st.rerun()
+                        break
+                    elif s == "failed":
+                        st.session_state.video_status = "failed"
+                        st.error(f"❌ Video generation failed: {e}")
+                        break
+                else:
+                    st.warning("Still processing... click 'Check Status' to refresh.")
 
-    if gen_clicked:
-        if not replicate_token:
-            st.error("❌ Please add your Replicate API Token in the sidebar.")
-        elif st.session_state.isl_data:
-            visual_prompt = st.session_state.isl_data.get("visual_description", st.session_state.transcription)
-            img_url = generate_image_replicate(visual_prompt, image_model)
-            if img_url:
-                st.session_state.image_url = img_url
+            elif status == "succeeded" and video_url:
+                st.session_state.video_url = video_url
                 st.rerun()
 
-    if st.session_state.image_url:
-        st.success("✅ Image generated!")
-        st.image(
-            st.session_state.image_url,
-            caption=f"ISL: {st.session_state.isl_data.get('gloss','') if st.session_state.isl_data else ''}",
-            use_container_width=True
-        )
-        st.markdown(f"🔗 [Open full image]({st.session_state.image_url})")
+            elif status == "failed":
+                st.error(f"❌ Generation failed: {error}")
+                st.markdown("Try clicking Reset and recording again.")
 
-# Footer
+        # Show final video
+        if st.session_state.video_url:
+            st.markdown('<p class="status-success">✅ Video Ready!</p>', unsafe_allow_html=True)
+            st.video(st.session_state.video_url)
+            st.markdown(f"[📥 Download Video]({st.session_state.video_url})", unsafe_allow_html=False)
+
+# -------------------------------
+# 📌 FOOTER
+# -------------------------------
 st.markdown("---")
-st.caption("💡 **Setup:** Add `GROQ_API_KEY` and `REPLICATE_API_TOKEN` to Streamlit Cloud Secrets for deployment. | Free tiers available on both platforms.")
+st.caption(
+    "🔑 **Setup:** Add `GROQ_API_KEY` and `REPLICATE_API_TOKEN` to Streamlit secrets. "
+    "Get Groq key free at [console.groq.com](https://console.groq.com). "
+    "Get Replicate token free at [replicate.com](https://replicate.com). "
+    "Video model: `minimax/video-01` with fallback to `lucataco/animate-diff`."
+)
