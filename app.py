@@ -346,8 +346,5 @@ if st.session_state.transcription:
 # -------------------------------
 st.markdown("---")
 st.caption(
-    "🔑 **Setup:** Add `GROQ_API_KEY` and `REPLICATE_API_TOKEN` to Streamlit secrets. "
-    "Get Groq key free at [console.groq.com](https://console.groq.com). "
-    "Get Replicate token free at [replicate.com](https://replicate.com). "
-    "Video model: `minimax/video-01` with fallback to `lucataco/animate-diff`."
+    "sign"
 )
